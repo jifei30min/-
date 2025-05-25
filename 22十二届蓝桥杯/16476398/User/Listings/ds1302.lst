@@ -1,0 +1,135 @@
+C51 COMPILER V9.54   DS1302                                                                05/10/2025 16:54:12 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE DS1302
+OBJECT MODULE PLACED IN .\Objects\ds1302.obj
+COMPILER INVOKED BY: E:\KeilC51\C51\BIN\C51.EXE ..\Diver\ds1302.c OPTIMIZE(8,SPEED) BROWSE INCDIR(..\Diver) DEBUG OBJECT
+                    -EXTEND PRINT(.\Listings\ds1302.lst) TABS(2) OBJECT(.\Objects\ds1302.obj)
+
+line level    source
+
+   1          /*  #   DS1302代码片段说明
+   2            1.  本文件夹中提供的驱动代码供参赛选手完成程序设计参考。
+   3            2.  参赛选手可以自行编写相关代码或以该代码为基础，根据所选单片机类型、�
+             -�行速度和试题
+   4              中对单片机时钟频率的要求，进行代码调试和修改。
+   5          */                
+   6          #include <STC15F2K60S2.H>
+   7          #include <intrins.h> //使_nop_();不报错
+   8          #include "ds1302.h"
+   9          
+  10          sbit SCK = P1^7;
+  11          sbit SDA = P2^3;
+  12          sbit RST = P1^3;
+  13          //写进地址
+  14          void Write_Ds1302(unsigned  char temp) 
+  15          {
+  16   1        unsigned char i;
+  17   1        for (i=0;i<8;i++)       
+  18   1        { 
+  19   2          SCK = 0;
+  20   2          SDA = temp&0x01;
+  21   2          temp>>=1; 
+  22   2          SCK=1;
+  23   2        }
+  24   1      }   
+  25          
+  26          //写进地址address 和数据dat 
+  27          void Write_Ds1302_Byte( unsigned char address,unsigned char dat )     
+  28          {
+  29   1        RST=0;  _nop_();//_nop_();等待一会儿
+  30   1        SCK=0;  _nop_();
+  31   1        RST=1;  _nop_();  
+  32   1        Write_Ds1302(address);  //写入地址
+  33   1        Write_Ds1302(dat);    //写入数据
+  34   1        RST=0; 
+  35   1      }
+  36          
+  37          //读地址(入口参数:address) 然后返回数据temp
+  38          unsigned char Read_Ds1302_Byte ( unsigned char address )
+  39          {
+  40   1        unsigned char i,temp=0x00;
+  41   1        RST=0;  _nop_();
+  42   1        SCK=0;  _nop_();
+  43   1        RST=1;  _nop_();
+  44   1        Write_Ds1302(address);
+  45   1        for (i=0;i<8;i++)   
+  46   1        {   
+  47   2          //下降沿为读数据
+  48   2          SCK=0;
+  49   2          temp>>=1; 
+  50   2          if(SDA)
+  51   2          temp|=0x80; 
+  52   2          SCK=1;
+  53   2        } 
+C51 COMPILER V9.54   DS1302                                                                05/10/2025 16:54:12 PAGE 2   
+
+  54   1        RST=0;  _nop_();
+  55   1        SCK=0;  _nop_();
+  56   1        SCK=1;  _nop_();
+  57   1        SDA=0;  _nop_();
+  58   1        SDA=1;  _nop_();
+  59   1        return (temp);      
+  60   1      }
+  61          
+  62          //将时间写入
+  63          void Set_Rtc(unsigned char* ucRtc) //*是一个指针 指向的是名字为ucRtc的数组
+  64          {
+  65   1        //WP = 0寄存器可以输入数据
+  66   1        Write_Ds1302_Byte(0X8E,0X00); //0X8E:是WP的地址 0X00:将WP置0
+  67   1        
+  68   1      //  unsigned char i;
+  69   1      //  for(i=0;i<3;i++)
+  70   1      //  {
+  71   1      //    Write_Ds1302_Byte(0X84 - i*2,ucRtc[i]);
+  72   1      //  }
+  73   1        
+  74   1        //写小时
+  75   1        Write_Ds1302_Byte(0X84,ucRtc[0]); //0X84:是写入小时的地址 ucRtc[0]:数组第0位 代表小时的�
+             -��
+  76   1        
+  77   1        //写分钟
+  78   1        Write_Ds1302_Byte(0X82,ucRtc[1]); //0X82:是写入分钟的地址 ucRtc[1]:数组第1位 代表分钟的�
+             -��
+  79   1        
+  80   1        //写秒
+  81   1        Write_Ds1302_Byte(0X80,ucRtc[2]); //0X80:是写入秒的地址 ucRtc[2]:数组第2位 代表秒的值
+  82   1        
+  83   1        //WP = 1寄存器禁止输入数据
+  84   1        Write_Ds1302_Byte(0X8E,0X80); //0X8E:是WP的地址 0X80:将WP置1
+  85   1      }
+  86          
+  87          //写一个读函数
+  88          void Read_Rtc(unsigned char * ucRtc)
+  89          {
+  90   1      //  unsigned char i;
+  91   1      //  for(i=0;i<3;i++)
+  92   1      //  {
+  93   1      //    ucRtc[i] = Read_Ds1302_Byte (0X85 - i * 2);
+  94   1      //  }
+  95   1        
+  96   1        //将读出的小时赋给数组第零位
+  97   1        ucRtc[0] = Read_Ds1302_Byte (0X85); //0X85:是读出小时的地址
+  98   1        
+  99   1        //将读出的分钟赋给数组第一位
+ 100   1        ucRtc[1] = Read_Ds1302_Byte (0X83); //0X83:是读出分钟的地址
+ 101   1        
+ 102   1        //将读出的秒赋给数组第二位
+ 103   1        ucRtc[2] = Read_Ds1302_Byte (0X81); //0X81:是读出秒的地址
+ 104   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    171    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----    ----
+   IDATA SIZE       =   ----    ----
+C51 COMPILER V9.54   DS1302                                                                05/10/2025 16:54:12 PAGE 3   
+
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

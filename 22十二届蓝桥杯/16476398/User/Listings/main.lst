@@ -1,0 +1,226 @@
+C51 COMPILER V9.54   MAIN                                                                  05/10/2025 16:54:12 PAGE 1   
+
+
+C51 COMPILER V9.54, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: E:\KeilC51\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE INCDIR(..\Diver) DEBUG OBJECTEXTEND PRIN
+                    -T(.\Listings\main.lst) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          //头文件声明区
+   2          #include <STC15F2K60S2.H>//单片机存储区头文件
+   3          #include <Init.H>//初始化底层驱动专用头文件
+   4          #include <Led.H>//Led底层取到专用头文件
+   5          #include <Seg.h>//按键底层驱动专用头文件
+   6          #include <Key.h>//数码管底层驱动专用头文件
+   7          #include <ds1302.h>//时钟驱动专用头文件
+   8          #include "onewire.h"//温度专用模块
+   9          #include "iic.h" //I2c模块
+  10          
+  11          //声明变量
+  12          unsigned char Key_Val,Key_Down,Key_Up,Key_Old;//按键扫描专用变量
+  13          unsigned int Key_Slow_Down; //按键减速专用变量10ms
+  14          unsigned char Seg_Buf[8] = {1,2,3,4,5,6,7,8}; //数码管显示数据存放数组
+  15          unsigned char Seg_Point[8] = {0,0,0,0,0,0,0,0};//数码管小数点数据存放数组
+  16          unsigned char Seg_Pos;//数码管扫描变量
+  17          unsigned int Seg_Slow_Down; //数码管减速专用变量500ms
+  18          unsigned char ucLed[8] = {0,0,0,0,0,0,0,0}; //LED显示数据存放数组
+  19          unsigned char Smg_Mode = 1;//界面切换 1为温度显示界面 2为参数设置界面 3为DAC输出界面
+  20          float Tempartae_One = 0;//1温度显示界面温度数据
+  21          unsigned char Tempartae_Disp = 25;//2温度显示界面温度参数
+  22          unsigned char Tempartae_Set = 25;//温度显示界面设置参数
+  23          float UC;//3输出界面电压参数
+  24          unsigned char SmgS5 = 1;//1为模式1 2为模式2
+  25          
+  26          
+  27          
+  28          //按键处理函数
+  29          void Key_Proc()
+  30          {
+  31   1        //如果Key_Slow_Down非零，if条件成立，执行return;语句，Key_Proc()会停止执行，不会执行后面的Key_Slow_Down =
+             - 1;
+  32   1        if(Key_Slow_Down) return;
+  33   1        
+  34   1        //Key_Slow_Down == 0时  Key_Slow_Down变为1
+  35   1        Key_Slow_Down = 1;//按键减速程序
+  36   1        
+  37   1        //照搬代码
+  38   1        Key_Val = Key_Read(); //读取按下的键码值
+  39   1        
+  40   1        Key_Down = Key_Val & (Key_Val ^ Key_Old);//捕捉下降沿 //按键按下那一瞬间的值
+  41   1        
+  42   1        Key_Up = ~Key_Val & (Key_Val ^ Key_Old);//捕捉上升沿 //按键抬起那一瞬间的值
+  43   1        
+  44   1        Key_Old = Key_Val;//辅助扫描 //按键一直按下的时候的值
+  45   1        
+  46   1        switch(Key_Down)
+  47   1        {
+  48   2          case 4:
+  49   2            if(++Smg_Mode == 4) Smg_Mode = 1;
+  50   2            if(Smg_Mode == 1) Tempartae_Disp = Tempartae_Set;
+  51   2            if(Smg_Mode == 2) Tempartae_Set = Tempartae_Disp;
+  52   2          break;
+  53   2          
+C51 COMPILER V9.54   MAIN                                                                  05/10/2025 16:54:12 PAGE 2   
+
+  54   2          //减
+  55   2          case 8:
+  56   2            if(Smg_Mode == 2)
+  57   2            {
+  58   3              if(--Tempartae_Disp < 10 ) Tempartae_Disp = 85;
+  59   3            }
+  60   2          break;
+  61   2            
+  62   2            //加
+  63   2          case 9:
+  64   2            if(Smg_Mode == 2)
+  65   2            {
+  66   3              if(++Tempartae_Disp > 85 ) Tempartae_Disp = 10;
+  67   3            }     
+  68   2          break;
+  69   2          case 5:
+  70   2            if(++SmgS5 == 3) SmgS5 = 1;
+  71   2          break;
+  72   2          
+  73   2        }
+  74   1      }
+  75          
+  76          //信息处理函数
+  77          void Seg_Proc()
+  78          {
+  79   1        if(Seg_Slow_Down) return;
+  80   1        Seg_Slow_Down = 1;//数码管减速程序
+  81   1        
+  82   1        //读取温度
+  83   1        Tempartae_One = read_t();
+  84   1        
+  85   1        if(SmgS5 == 1)
+  86   1        {
+  87   2          if(Tempartae_One < Tempartae_Disp) UC = 0.0;
+  88   2          else 
+  89   2          {
+  90   3            UC = 5.0;
+  91   3          }
+  92   2        }
+  93   1        if(SmgS5 == 2)
+  94   1        {
+  95   2          if(Tempartae_One <= 20) UC = 1.0;
+  96   2          if(Tempartae_One >= 40) UC = 4.0;
+  97   2          if(Tempartae_One > 20 && Tempartae_One < 40) UC = (0.15 * (Tempartae_One - 20)) + 1.0;
+  98   2        }
+  99   1        
+ 100   1        //DAC输出电压
+ 101   1        Da_Write((unsigned char)(UC * 51.0));
+ 102   1        
+ 103   1        switch(Smg_Mode)
+ 104   1        {
+ 105   2          case 1:
+ 106   2            Seg_Buf[0] = 12;
+ 107   2            Seg_Buf[1] = 17;
+ 108   2            Seg_Buf[2] = 17;
+ 109   2            Seg_Buf[3] = 17;
+ 110   2            Seg_Buf[4] = (unsigned int)Tempartae_One / 10;
+ 111   2            Seg_Buf[5] = (unsigned int)Tempartae_One % 10;
+ 112   2            Seg_Buf[6] = (unsigned int)Tempartae_One * 10 /10 % 10;
+ 113   2            Seg_Buf[7] = (unsigned int)Tempartae_One / 100 /10 % 10;
+ 114   2            Seg_Point[5] = 1;
+ 115   2          break;
+C51 COMPILER V9.54   MAIN                                                                  05/10/2025 16:54:12 PAGE 3   
+
+ 116   2          case 2:
+ 117   2            Seg_Buf[0] = 18;
+ 118   2            Seg_Buf[1] = 17;
+ 119   2            Seg_Buf[2] = 17;
+ 120   2            Seg_Buf[3] = 17;
+ 121   2            Seg_Buf[4] = 17;
+ 122   2            Seg_Buf[5] = 17;
+ 123   2            Seg_Buf[6] = Tempartae_Disp / 10;
+ 124   2            Seg_Buf[7] = Tempartae_Disp % 10;
+ 125   2            Seg_Point[5] = 0;
+ 126   2          break;    
+ 127   2          case 3:
+ 128   2            Seg_Buf[0] = 10;
+ 129   2            Seg_Buf[1] = 17;
+ 130   2            Seg_Buf[2] = 17;
+ 131   2            Seg_Buf[3] = 17;
+ 132   2            Seg_Buf[4] = 17;
+ 133   2            Seg_Buf[5] = (unsigned int)UC % 10;
+ 134   2            Seg_Buf[6] = (unsigned int)(UC * 10) % 10; //避免了UC先被强制转换后小数点消失 然后显示不准确的问题
+ 135   2            Seg_Buf[7] = (unsigned int)(UC * 100) % 10; //避免了UC先被强制转换后小数点消失 然后显示不准确的问题
+ 136   2            Seg_Point[5] = 1;
+ 137   2          break;      
+ 138   2        }
+ 139   1        
+ 140   1      }
+ 141          
+ 142          //其他显示函数
+ 143          void Led_Proc()
+ 144          {
+ 145   1        if(SmgS5 == 1) Led_Disp(0,1);
+ 146   1        if(Smg_Mode == 1) Led_Disp(1,1);
+ 147   1        if(Smg_Mode == 2) Led_Disp(2,1);
+ 148   1        if(Smg_Mode == 3) Led_Disp(3,1);
+ 149   1      }
+ 150          
+ 151          //定时器0初始化函数
+ 152          //12MHZ 定时器0 1ms 16位自动重装载 12T
+ 153          void Timer0Init(void)   //1毫秒@12.000MHz
+ 154          {
+ 155   1        AUXR &= 0x7F;   //定时器时钟12T模式
+ 156   1        TMOD &= 0xF0;   //设置定时器模式
+ 157   1        TL0 = 0x18;   //设置定时初值
+ 158   1        TH0 = 0xFC;   //设置定时初值
+ 159   1        TF0 = 0;    //清除TF0标志
+ 160   1        TR0 = 1;    //定时器0开始计时
+ 161   1        
+ 162   1        ET0 = 1;
+ 163   1        EA = 1;
+ 164   1      }
+ 165          
+ 166          
+ 167          //定时器0中断服务函数
+ 168          void Timer0Service() interrupt 1
+ 169          {
+ 170   1        //自动重装载 不需要赋初值
+ 171   1        
+ 172   1        Key_Slow_Down++;
+ 173   1        if(Key_Slow_Down == 10) Key_Slow_Down=0; //if(++Key_Slow_Down == 10)Key_Slow_Down=0;
+ 174   1        
+ 175   1        Seg_Slow_Down++;
+ 176   1        if(Seg_Slow_Down == 500) Seg_Slow_Down=0;//if(++Seg_Slow_Down == 500) Seg_Slow_Down=0;
+ 177   1        
+C51 COMPILER V9.54   MAIN                                                                  05/10/2025 16:54:12 PAGE 4   
+
+ 178   1        if(++Seg_Pos == 8) Seg_Pos = 0;
+ 179   1        Seg_Disp(Seg_Pos,Seg_Buf[Seg_Pos],Seg_Point[Seg_Pos]);
+ 180   1        Led_Disp(Seg_Pos,ucLed[Seg_Pos]);
+ 181   1      }
+ 182          
+ 183          //Main函数
+ 184          void main()
+ 185          {
+ 186   1        System_Init();
+ 187   1        Timer0Init();
+ 188   1        
+ 189   1        while(1)
+ 190   1        {
+ 191   2          Key_Proc();
+ 192   2          Seg_Proc();
+ 193   2          Led_Proc();
+ 194   2        }
+ 195   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    857    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     45    ----
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
